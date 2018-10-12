@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  PutHotSpotLambdaArn:
+    Type: String
+
+  GetHotSpotsLambdaArn:
+    Type: String
+
+Resources:
+  HotSpotApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Description: HotSpot Api
+      EndpointConfiguration:
+        Types:
+        - REGIONAL
+      FailOnWarnings: False
+      Name: HotSpotApi
+
+  GetHotSpotsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: GET
+      RequestParameters:
+        method.request.querystring.lat: True
+        method.request.querystring.lng: True
+        method.request.querystring.range: False
+        method.request.querystring.hash: False
+      Integration:
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+        - StatusCode: 200
+        PassthroughBehavior: Never
+        RequestTemplates:
+          application/json: '#set($allParams = $input.params()){"event": {#set($params = $allParams.get("querystring"))#foreach($paramName in $params.keySet())#if($params.get($paramName) != "")"$paramName": $util.escapeJavaScript($params.get($paramName))#if($foreach.hasNext),#end#end#end}}'
+        Type: AWS
+        Uri:
+          !Join ["", ["arn:aws:apigateway:", !Ref "AWS::Region", ":lambda:path/2015-03-31/functions/", !Ref GetHotSpotsLambdaArn, "/invocations"]]
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: Empty
+      OperationName: GetHotSpots
+      ResourceId:
+        !GetAtt HotSpotApiGateway.RootResourceId
+      RestApiId:
+        !Ref HotSpotApiGateway
+
+  PutHotSpotsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: PUT
+      Integration:
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+        - StatusCode: 200
+        PassthroughBehavior: Never
+        RequestTemplates:
+          application/json: $input.json("body")
+        Type: AWS
+        Uri:
+          !Join ["", ["arn:aws:apigateway:", !Ref "AWS::Region", ":lambda:path/2015-03-31/functions/", !Ref PutHotSpotLambdaArn, "/invocations"]]
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: Empty
+      OperationName: PutHotSpots
+      ResourceId:
+        !GetAtt HotSpotApiGateway.RootResourceId
+      RestApiId:
+        !Ref HotSpotApiGateway
+
+  HotSpotDeployment:
+    DependsOn: [PutHotSpotsMethod, GetHotSpotsMethod, ]
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      Description: Deployment for the API Gateway
+      RestApiId:
+        !Ref HotSpotApiGateway
+
+  AlphaStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId:
+        !Ref HotSpotDeployment
+      Description: First stage for HotSpot, used for testing in the earliest stages of deployment
+      RestApiId:
+        !Ref HotSpotApiGateway
+      StageName: alpha
+
+  PutHotSpotLambdaApiGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !Ref PutHotSpotLambdaArn
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotSpotApiGateway}/*/PUT/
+
+  GetHotSpotsLambdaApiGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !Ref GetHotSpotsLambdaArn
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotSpotApiGateway}/*/GET/
+
+Outputs:
+  HotSpotApiId:
+    Description: ID for the HotSpot API
+    Value: !Ref HotSpotApiGateway

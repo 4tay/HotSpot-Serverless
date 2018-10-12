@@ -6,7 +6,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 
-def lambda_handler(event, context):
+def put_hot_spot_handler(event, context):
     print('event: {}'.format(event))
     dynamodb = boto3.resource("dynamodb")
 
@@ -14,7 +14,7 @@ def lambda_handler(event, context):
     lat = Decimal(str(event.get('lat', 35.7721)))
     lng = Decimal(str(event.get('lng', -78.6441)))
     id = context.aws_request_id
-    hash = event.get('hash', 'no hash')
+    hash = str(event.get('hash', 'no hash'))
     print("lat, lng: {} {}".format(lat, lng))
     date_time = datetime.now()
     color_code = event.get('colorCode', '1')
@@ -63,4 +63,4 @@ if __name__ == '__main__':
 
     }
     context = Context()
-    print(lambda_handler(event_dict, context))
+    print(put_hot_spot_handler(event_dict, context))
